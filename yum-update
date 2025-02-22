@@ -1,0 +1,137 @@
+#!/bin/bash
+# Get the script's filename without path
+directory_name=$(dirname "$0")
+script_name=$(basename "$0")
+# Generate a unique lock file name by combining the directory name and script name,
+# converting them to lowercase, replacing spaces and non-alphanumeric characters with hyphens,
+locked_name="${directory_name}-${script_name}-by-${USER}"
+locked_name=$(echo "$locked_name" | tr '[:upper:]' '[:lower:]') # Convert to lowercase
+locked_name=$(echo "$locked_name" | sed -E 's/[^a-z0-9]+/-/g')  # Replace spaces and non-alphanumeric characters with hyphens
+locked_name=$(echo "$locked_name" | sed -E 's/^-+|-+$//g')      # Remove any extra hyphens at the beginning or end of the string
+mkdir -p /tmp/hungng-locked && chmod 0777 /tmp/hungng-locked
+locked_filename="/tmp/hungng-locked/${locked_name}.lock"
+# Lock the script so that only one instance can run at a time.
+exec 200>"${locked_filename}" || exit 1
+flock -n 200 || exit 1
+##################################################################################
+#    _    _                     _   _                                            #
+#   | |  | |                   | \ | |                                           #
+#   | |__| |_   _ _ __   __ _  |  \| | __ _ _   _ _   _  ___ _ __                #
+#   |  __  | | | | '_ \ / _` | | . ` |/ _` | | | | | | |/ _ \ '_ \               #
+#   | |  | | |_| | | | | (_| | | |\  | (_| | |_| | |_| |  __/ | | |              #
+#   |_|  |_|\__,_|_| |_|\__, | |_| \_|\__, |\__,_|\__, |\___|_| |_|              #
+#                        __/ |         __/ |       __/ |                         #
+#                       |___/         |___/       |___/                          #
+#--------------------------------------------------------------------------------#
+#                       BEAR Manage Server Script Configure                      #
+# Manage Server by Hung Nguyen - hungna.dev@gmail.com - https://nguyenanhung.com #
+# Any copying without written permission is a violation of copyright policy!     #
+##################################################################################
+DEVELOP_BY="Hung Nguyen - hungna.dev@gmail.com"
+SCRIPT_VERSION="2.2.7"
+# Bash variables
+export NC='\033[0m'
+export RED='\033[0;31m'
+export GREEN='\033[0;32m'
+export YELLOW='\033[0;33m'
+export CYAN='\033[0;36m'
+export NAVAJO_WHITE='\033[38;5;223m' # Navajo white
+# Function to ask the user whether to proceed with an action. Usage: confirm_action <ask_confirm_msg>
+confirm_action() {
+  local ask_confirm_msg confirmation
+  ask_confirm_msg=$1
+  echo -ne "${ask_confirm_msg} (Y/N, ${GREEN}empty as No${NC}, press ${YELLOW}[Ctrl+C (macOS: Control+C)]${NC} quit proceed): "
+  read -r confirmation # Read user input
+  [[ $confirmation =~ ^(Y|y|YES|yes|Yes|OK|ok)$ ]]
+}
+# Function print message
+print_message() {
+  local LINE="----------------------------------------------------------------------"
+  if [ -z "$1" ]; then
+    echo -e "\n${LINE}\n"
+  else
+    echo -e "\n${LINE}\n${CYAN}$1${NC}\n${LINE}\n"
+  fi
+}
+display_script_information() {
+  local SCRIPT_NAME
+  SCRIPT_NAME=${1:-"BEAR Manage Server Script"}
+  print_message
+  echo "  _    _                           _   _    _____ "
+  echo " | |  | |                         | \ | |  / ____|"
+  echo " | |__| |  _   _   _ __     __ _  |  \| | | |  __ "
+  echo " |  __  | | | | | | '_ \   / _\` | | . \` | | | |_ |"
+  echo " | |  | | | |_| | | | | | | (_| | | |\  | | |__| |"
+  echo " |_|  |_|  \__,_| |_| |_|  \__, | |_| \_|  \_____|"
+  echo "                            __/ |                 "
+  echo "                           |___/                  "
+  echo
+  echo -e "Powered by ${NAVAJO_WHITE}${DEVELOP_BY}${NC}"
+  echo
+  echo -e "${GREEN}${SCRIPT_NAME}${NC} - version ${YELLOW}${SCRIPT_VERSION}${NC}"
+  print_message
+}
+display_script_information "Yum & Check Updates Scripts"
+
+print_message "📌 Check Diskspace"
+df -h
+
+print_message "📌 Check RAM & Swap"
+free -h
+
+print_message "📌 Check GPGCheck in Repository"
+grep -E '^\s*gpgcheck\s*=\s*0' /etc/yum.repos.d/*.repo
+
+print_message "📌 Xác thực GPG Public Key"
+rpm -q gpg-pubkey --qf '%{NAME}-%{VERSION}-%{RELEASE}\t%{SUMMARY}\n'
+
+# Kiểm tra cập nhật bảo mật
+print_message "📌 Kiểm tra các bản cập nhật bảo mật..."
+security_update_list=$(sudo yum check-update --security 2>/dev/null)
+
+if echo "$security_update_list" | grep -q "Needed"; then
+  echo "🔒 Có các bản cập nhật bảo mật sẵn sàng:"
+  echo
+  echo "$security_update_list"
+
+  # Xác nhận trước khi cập nhật
+  echo
+  if confirm_action "Bạn có muốn cập nhật các gói bảo mật đã biết không?"; then
+    echo "⚡ Đang tiến hành cập nhật bảo mật..."
+    sudo yum update --security
+  else
+    echo "❌ Đã hủy cập nhật bảo mật."
+  fi
+else
+  echo "✅ Không có bản cập nhật bảo mật nào cần thiết."
+fi
+
+# Kiểm tra tất cả các cập nhật có sẵn
+print_message "📌 Kiểm tra tất cả các bản cập nhật khác..."
+update_list=$(sudo yum check-update 2>/dev/null)
+
+if [[ -n "$update_list" ]]; then
+  echo "🔄 Có các bản cập nhật thông thường:"
+  echo
+  echo "$update_list"
+
+  # Xác nhận trước khi cập nhật
+  echo
+  if confirm_action "Bạn có muốn cập nhật tất cả các gói bên trên không?"; then
+    echo "⚡ Đang tiến hành cập nhật tất cả các gói..."
+    sudo yum update
+  else
+    echo "❌ Đã hủy cập nhật toàn bộ hệ thống."
+  fi
+else
+  echo "✅ Hệ thống đã được cập nhật đầy đủ."
+fi
+
+# Display Yum history
+print_message "📌 Lịch sử cập nhật"
+echo
+sudo yum history list --showduplicates --quiet
+
+# ===== Unset variables =====
+print_message "Finished at $(date)"
+unset CYAN YELLOW GREEN RED NC
